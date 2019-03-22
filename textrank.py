@@ -57,3 +57,9 @@ class Sentence:
 
     def __hash__(self):
         return self.index
+
+
+sentences = get_sentences(text)
+graph = build_graph(sentences)
+pagerank = networkx.pagerank(graph, weight='weight')
+reordered = sorted(pagerank, key=pagerank.get, reverse=True)
