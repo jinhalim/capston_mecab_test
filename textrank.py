@@ -58,6 +58,25 @@ class Sentence:
     def __hash__(self):
         return self.index
 
+def get_sentences(text):
+    candidates = xplit('. ', '? ', '! ', '\n', '.\n')(text.strip())
+    sentences = []
+    index = 0
+    for candidate in candidates:
+    	candidate = candidate.strip()
+        if len(candidate):
+            sentences.append(Sentence(candidate, index))
+            index += 1
+    return sentences
+
+def build_graph(sentences):
+    graph = networkx.Graph()
+    graph.add_nodes_from(sentences)
+    pairs = list(itertools.combinations(sentences, 2))
+    for eins, zwei in pairs:
+        graph.add_edge(eins, zwei, weight=Sentence.co_occurence(eins, zwei))
+    return graph
+
 
 sentences = get_sentences(text)
 graph = build_graph(sentences)
