@@ -1,27 +1,30 @@
 #rule-based로 문장을 구분 하는 방법
 import re 
-text = "이세돌은 알파고를 이겼다. 이세돌은 강하다. 알파고도 짱쎔."
-
+text3 = "이세돌은 알파고를 이겼다. 이세돌은 강하다. 알파고도 짱쎔."
+text1 = u"목이 많이 따갑고 기침 미열 그리고 콧물 가래등 증상이있어서 항생제도 같이 처방을 받아 먹었는데, 설사가 지속되었고 증상이 완전히 다 낫지않아서 다시 병원을 찾았는데 의사선생님께서는 감기가 염증으로 되어 항생제를 먹어야 한다며 항생제를 바꿔주셨는데 더 안맞는지 구토와 빈혈 설사까지 동반되어 한번 먹고 약을 먹지 않고 있습니다. 근데 목과 기침 미열이 있어서 약은 먹어야 할 것 같은데애니코프캡슐,퀴놀론계 항생제,몬테리진캡슐,알피라니티딘염산,올리비올250칸셀,시네츄라시럽이렇게 있는데 이 중에서 기관지확장제 애니코프캡슐과 비염약 몬테리진캡슐,시네츄라시럽만 먹어도 되나요? 위장약은 같이 안먹어도 될까요?"
 def xplit(*delimiters):
     return lambda value: re.split('|'.join([re.escape(delimiter) for delimiter in delimiters]), value)
 # print(xplit('. ', '? ', '! ', '\n', '.\n')("This is a sentence. Here is another sentence.\nHello, world!"))
 # ['This is a sentence', 'Here is another sentence', 'Hello, world!']
-print(xplit('. ', '? ', '! ', '\n', '.\n')(text))
-xplittext = xplit('. ', '? ', '! ', '\n', '.\n')(text)
+print(xplit('. ', '? ', '! ', '\n', '.\n')(text1))
+xplittext = xplit('. ', '? ', '! ', '\n', '.\n')(text1)
 
 #그냥 Mecab형태소 분석기
 from konlpy.tag import Mecab
 mecab = Mecab(dicpath="C:/mecab/mecab-ko-dic")
-print(mecab.nouns(text))
+print(mecab.nouns(text1))
 print("\n")
 
 #test xplit,Mecab동시 사용
 from collections import Counter
 bow1 = Counter(mecab.nouns(xplittext[0]))
 bow1 += Counter(mecab.nouns(xplittext[1]))
+bow1 += Counter(mecab.nouns(xplittext[2]))
 bow2 = Counter(mecab.nouns(xplittext[1]))
 print(bow1,",",bow2)
 print("\n")
+for k,v in bow1.items():
+	print(k,":",v)
 # Counter({'이세돌': 2, '파고': 1}) , Counter({'이세돌': 1})
 
 #j_index: 문장간 영향력을 행사하는 정도
@@ -38,47 +41,271 @@ print(j_index)
 #계산 할수 있게 되었으니 남은건 이걸로 그래프를 그리고 
 #거기서 PageRank를 돌릴 것
 
+
+from konlpy.tag import Mecab
+mecab = Mecab(dicpath="C:/mecab/mecab-ko-dic")
+
+import networkx 
+import itertools
+
 class Sentence:
 
-    @staticmethod
-    def co_occurence(sentence1, sentence2):
-        p = sum((sentence1.bow & sentence2.bow).values())
-        q = sum((sentence1.bow | sentence2.bow).values())
-        return p / q if q else 0
+	@staticmethod
+	def co_occurence(sentence1, sentence2):
+		p = sum((sentence1.bow & sentence2.bow).values())
+		q = sum((sentence1.bow | sentence2.bow).values())
+		return p / q if q else 0
 
-    def __init__(self, text, index=0):
-        self.index = index
-        self.text = text
-        self.nouns = twitter.nouns(self.text)
-        self.bow = Counter(self.nouns)
+	def __init__(self, text, index=0):
+		self.index = index
+		self.text = text
+		self.nouns = mecab.nouns(self.text)
+		self.bow = Counter(self.nouns)
 
-    def __eq__(self, another):
-        return hasattr(another, 'index') and self.index == another.index
+	def __eq__(self, another):
+		return hasattr(another, 'index') and self.index == another.index
 
-    def __hash__(self):
-        return self.index
+	def __hash__(self):
+		return self.index
 
 def get_sentences(text):
-    candidates = xplit('. ', '? ', '! ', '\n', '.\n')(text.strip())
-    sentences = []
-    index = 0
-    for candidate in candidates:
-    	candidate = candidate.strip()
-        if len(candidate):
-            sentences.append(Sentence(candidate, index))
-            index += 1
-    return sentences
+	candidates = xplit('. ', '? ', '! ', '\n', '.\n')(text.strip())
+	sentences = []
+	index = 0
+	for candidate in candidates:
+		candidate = candidate.strip()
+		if len(candidate):
+			sentences.append(Sentence(candidate, index))
+			index += 1
+	return sentences
 
 def build_graph(sentences):
-    graph = networkx.Graph()
-    graph.add_nodes_from(sentences)
-    pairs = list(itertools.combinations(sentences, 2))
-    for eins, zwei in pairs:
-        graph.add_edge(eins, zwei, weight=Sentence.co_occurence(eins, zwei))
-    return graph
+	graph = networkx.Graph()
+	graph.add_nodes_from(sentences)
+	pairs = list(itertools.combinations(sentences, 2))
+	for eins, zwei in pairs:
+		graph.add_edge(eins, zwei, weight=Sentence.co_occurence(eins, zwei))
+	return graph
 
-
-sentences = get_sentences(text)
+text2 = "이세돌은 알파고를 이겼다. 이세돌은 강하다. 알파고도 짱쎔."
+sentences = get_sentences(text2)
 graph = build_graph(sentences)
 pagerank = networkx.pagerank(graph, weight='weight')
 reordered = sorted(pagerank, key=pagerank.get, reverse=True)
+
+print("중요한 문장?순\n")
+
+
+import networkx
+import re
+ 
+class RawSentence:
+    def __init__(self, textIter):
+        if type(textIter) == str: self.textIter = textIter.split('\n')
+        else: self.textIter = textIter
+        self.rgxSplitter = re.compile('([.!?:](?:["\']|(?![0-9])))')
+ 
+    def __iter__(self):
+        for line in self.textIter:
+            ch = self.rgxSplitter.split(line)
+            for s in map(lambda a, b: a + b, ch[::2], ch[1::2]):
+                if not s: continue
+                yield s
+ 
+class RawSentenceReader:
+    def __init__(self, filepath):
+        self.filepath = filepath
+        self.rgxSplitter = re.compile('([.!?:](?:["\']|(?![0-9])))')
+ 
+    def __iter__(self):
+        for line in open(self.filepath, encoding='utf-8'):
+            ch = self.rgxSplitter.split(line)
+            for s in map(lambda a, b: a + b, ch[::2], ch[1::2]):
+                if not s: continue
+                yield s
+ 
+class RawTagger:
+    def __init__(self, textIter, tagger = None):
+        if tagger:
+            self.tagger = tagger
+        else :
+            from konlpy.tag import Mecab
+            self.tagger = Mecab()
+        if type(textIter) == str: self.textIter = textIter.split('\n')
+        else: self.textIter = textIter
+        self.rgxSplitter = re.compile('([.!?:](?:["\']|(?![0-9])))')
+ 
+    def __iter__(self):
+        for line in self.textIter:
+            ch = self.rgxSplitter.split(line)
+            for s in map(lambda a,b:a+b, ch[::2], ch[1::2]):
+                if not s: continue
+                yield self.tagger.pos(s)
+ 
+class RawTaggerReader:
+    def __init__(self, filepath, tagger = None):
+        if tagger:
+            self.tagger = tagger
+        else :
+            from konlpy.tag import Mecab
+            self.tagger = Mecab(dicpath="C:/mecab/mecab-ko-dic")
+        self.filepath = filepath
+        self.rgxSplitter = re.compile('([.!?:](?:["\']|(?![0-9])))')
+ 
+    def __iter__(self):
+        for line in open(self.filepath, encoding='utf-8'):
+            ch = self.rgxSplitter.split(line)
+            for s in map(lambda a,b:a+b, ch[::2], ch[1::2]):
+                if not s: continue
+                yield self.tagger.pos(s)
+ 
+class TextRank:
+    def __init__(self, **kargs):
+        self.graph = None
+        self.window = kargs.get('window', 5)
+        self.coef = kargs.get('coef', 1.0)
+        self.threshold = kargs.get('threshold', 0.005)
+        self.dictCount = {}
+        self.dictBiCount = {}
+        self.dictNear = {}
+        self.nTotal = 0
+ 
+ 
+    def load(self, sentenceIter, wordFilter = None):
+        def insertPair(a, b):
+            if a > b: a, b = b, a
+            elif a == b: return
+            self.dictBiCount[a, b] = self.dictBiCount.get((a, b), 0) + 1
+ 
+        def insertNearPair(a, b):
+            self.dictNear[a, b] = self.dictNear.get((a, b), 0) + 1
+ 
+        for sent in sentenceIter:
+            for i, word in enumerate(sent):
+                if wordFilter and not wordFilter(word): continue
+                self.dictCount[word] = self.dictCount.get(word, 0) + 1
+                self.nTotal += 1
+                if i - 1 >= 0 and (not wordFilter or wordFilter(sent[i-1])): insertNearPair(sent[i-1], word)
+                if i + 1 < len(sent) and (not wordFilter or wordFilter(sent[i+1])): insertNearPair(word, sent[i+1])
+                for j in range(i+1, min(i+self.window+1, len(sent))):
+                    if wordFilter and not wordFilter(sent[j]): continue
+                    if sent[j] != word: insertPair(word, sent[j])
+ 
+    def loadSents(self, sentenceIter, tokenizer = None):
+        import math
+        def similarity(a, b):
+            n = len(a.intersection(b))
+            return n / float(len(a) + len(b) - n) / (math.log(len(a)+1) * math.log(len(b)+1))
+ 
+        if not tokenizer: rgxSplitter = re.compile('[\\s.,:;-?!()"\']+')
+        sentSet = []
+        for sent in filter(None, sentenceIter):
+            if type(sent) == str:
+                if tokenizer: s = set(filter(None, tokenizer(sent)))
+                else: s = set(filter(None, rgxSplitter.split(sent)))
+            else: s = set(sent)
+            if len(s) < 2: continue
+            self.dictCount[len(self.dictCount)] = sent
+            sentSet.append(s)
+ 
+        for i in range(len(self.dictCount)):
+            for j in range(i+1, len(self.dictCount)):
+                s = similarity(sentSet[i], sentSet[j])
+                if s < self.threshold: continue
+                self.dictBiCount[i, j] = s
+ 
+    def getPMI(self, a, b):
+        import math
+        co = self.dictNear.get((a, b), 0)
+        if not co: return None
+        return math.log(float(co) * self.nTotal / self.dictCount[a] / self.dictCount[b])
+ 
+    def getI(self, a):
+        import math
+        if a not in self.dictCount: return None
+        return math.log(self.nTotal / self.dictCount[a])
+ 
+    def build(self):
+        self.graph = networkx.Graph()
+        self.graph.add_nodes_from(self.dictCount.keys())
+        for (a, b), n in self.dictBiCount.items():
+            self.graph.add_edge(a, b, weight=n*self.coef + (1-self.coef))
+ 
+    def rank(self):
+        return networkx.pagerank(self.graph, weight='weight')
+ 
+    def extract(self, ratio = 0.1):
+        ranks = self.rank()
+        cand = sorted(ranks, key=ranks.get, reverse=True)[:int(len(ranks) * ratio)]
+        pairness = {}
+        startOf = {}
+        tuples = {}
+        for k in cand:
+            tuples[(k,)] = self.getI(k) * ranks[k]
+            for l in cand:
+                if k == l: continue
+                pmi = self.getPMI(k, l)
+                if pmi: pairness[k, l] = pmi
+ 
+        for (k, l) in sorted(pairness, key=pairness.get, reverse=True):
+            print(k[0], l[0], pairness[k, l])
+            if k not in startOf: startOf[k] = (k, l)
+ 
+        for (k, l), v in pairness.items():
+            pmis = v
+            rs = ranks[k] * ranks[l]
+            path = (k, l)
+            tuples[path] = pmis / (len(path) - 1) * rs ** (1 / len(path)) * len(path)
+            last = l
+            while last in startOf and len(path) < 7:
+                if last in path: break
+                pmis += pairness[startOf[last]]
+                last = startOf[last][1]
+                rs *= ranks[last]
+                path += (last,)
+                tuples[path] = pmis / (len(path) - 1) * rs ** (1 / len(path)) * len(path)
+ 
+        used = set()
+        both = {}
+        for k in sorted(tuples, key=tuples.get, reverse=True):
+            if used.intersection(set(k)): continue
+            both[k] = tuples[k]
+            for w in k: used.add(w)
+ 
+        #for k in cand:
+        #    if k not in used or True: both[k] = ranks[k] * self.getI(k)
+ 
+        return both
+ 
+    def summarize(self, ratio = 0.333):
+        r = self.rank()
+        ks = sorted(r, key=r.get, reverse=True)[:int(len(r)*ratio)]
+        return ' '.join(map(lambda k:self.dictCount[k], sorted(ks)))
+
+
+tr = TextRank()
+print('Load...')
+# from konlpy.tag import Mecab
+tagger = Mecab(dicpath="C:/mecab/mecab-ko-dic")
+stopword = set([('있', 'VV'), ('하', 'VV'), ('되', 'VV') ])
+tr.loadSents(RawSentenceReader('test2.txt'), lambda sent: filter(lambda x:x not in stopword and x[1] in ('NNG', 'NNP', 'VV', 'VA'), tagger.pos(sent)))
+# tr.loadSents(RawSentenceReader(text2), lambda sent: filter(lambda x:x not in stopword and x[1] in ('NNG', 'NNP', 'VV', 'VA'), tagger.pos(sent)))
+print('Build...')
+tr.build()
+ranks = tr.rank()
+for k in sorted(ranks, key=ranks.get, reverse=True)[:100]:
+    print("\t".join([str(k), str(ranks[k]), str(tr.dictCount[k])]))
+print(tr.summarize(0.2))
+# 
+
+tr = TextRank(window=5, coef=1)
+print('Load...')
+stopword = set([('있', 'VV'), ('하', 'VV'), ('되', 'VV'), ('없', 'VV') ])
+tr.load(RawTaggerReader('test2.txt'), lambda w: w not in stopword and (w[1] in ('NNG', 'NNP', 'VV', 'VA')))
+print('Build...')
+tr.build()
+kw = tr.extract(0.1)
+for k in sorted(kw, key=kw.get, reverse=True):
+    print("%s\t%g" % (k, kw[k]))
+
+
